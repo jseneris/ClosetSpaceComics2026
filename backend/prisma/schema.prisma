@@ -1,0 +1,147 @@
+// Prisma schema for ClosetSpaceComics — ported from the legacy EF entities in
+// ClosetSpaceComicsApiPublic (ClosetSpaceComics.Domain / ClosetSpaceComics.ServiceNew).
+// Target: Azure SQL Database.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog: Publishers -> Titles -> Issues
+// ---------------------------------------------------------------------------
+
+model Publisher {
+  id               Int      @id @default(autoincrement())
+  name             String
+  seoFriendlyName  String?
+  imageName        String?
+  displayOrder     Int?
+  titles           Title[]
+
+  @@map("Publishers")
+}
+
+model Title {
+  id              Int       @id @default(autoincrement())
+  name            String
+  seoFriendlyName String?
+  yearStart       Int
+  yearEnd         Int?
+  issueBegin      String?
+  issueEnd        String?
+  lastUpdate      DateTime?
+  publisherId     Int
+  publisher       Publisher @relation(fields: [publisherId], references: [id])
+  issues          Issue[]
+  purchaseItems   PurchaseItem[]
+
+  @@map("Titles")
+}
+
+model Issue {
+  id                 Int       @id @default(autoincrement())
+  seoFriendlyName    String?
+  issueNumberOrdinal Int
+  description        String?
+  coverPrice         Decimal   @db.Decimal(10, 2)
+  releaseDate        DateTime?
+  imageUrl           String?
+  titleId            Int
+  title              Title     @relation(fields: [titleId], references: [id])
+  createdDate        DateTime  @default(now())
+  purchaseItems      PurchaseItem[]
+
+  @@map("Issues")
+}
+
+// ---------------------------------------------------------------------------
+// User: Locations -> Boxes, Purchases -> PurchaseItems -> Photos
+// ---------------------------------------------------------------------------
+
+model User {
+  id        Int        @id @default(autoincrement())
+  auth0Id   String     @unique
+  userName  String?
+  locations Location[]
+  purchases Purchase[]
+
+  @@map("Users")
+}
+
+model Location {
+  id     Int    @id @default(autoincrement())
+  name   String
+  order  Int    @default(0)
+  userId Int
+  user   User   @relation(fields: [userId], references: [id])
+  boxes  Box[]
+
+  @@map("Locations")
+}
+
+model Box {
+  id         Int            @id @default(autoincrement())
+  name       String
+  order      Int            @default(0)
+  locationId Int
+  location   Location       @relation(fields: [locationId], references: [id])
+  items      PurchaseItem[]
+
+  @@map("Boxes")
+}
+
+model Purchase {
+  id            Int            @id @default(autoincrement())
+  description   String
+  purchaseDate  DateTime
+  price         Decimal        @db.Decimal(10, 2)
+  userId        Int
+  user          User           @relation(fields: [userId], references: [id])
+  items         PurchaseItem[]
+
+  @@map("Purchases")
+}
+
+// SQL Server connector does not support native enums in Prisma, so grading
+// fields are stored as strings. Allowed values (mirrors the legacy C# enums):
+// gradingService: NONE | CGC | CBCS | PGX
+// gradedCondition / condition: RAW | POOR | FAIR | GOOD | VERY_GOOD | FINE | VERY_FINE | NEAR_MINT | MINT
+// paperQuality: WHITE | OFF_WHITE | CREAM | TAN | BROWN
+model PurchaseItem {
+  id                 Int      @id @default(autoincrement())
+  purchaseId         Int
+  purchase           Purchase @relation(fields: [purchaseId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  boxId              Int?
+  box                Box?     @relation(fields: [boxId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  titleId            Int?
+  title              Title?   @relation(fields: [titleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  issueId            Int?
+  issue              Issue?   @relation(fields: [issueId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  issueNumber        String?
+  issueNumberOrdinal Int?
+  condition          Int      @default(0)
+  order              Int      @default(0)
+  notes              String?
+  gradingService     String?
+  gradedCondition    String?
+  paperQuality       String?
+  certificateNumber  String?
+  photos             Photo[]
+
+  @@map("PurchaseItems")
+}
+
+model Photo {
+  id             Int          @id @default(autoincrement())
+  name           String
+  blobUrl        String
+  purchaseItemId Int
+  purchaseItem   PurchaseItem @relation(fields: [purchaseItemId], references: [id])
+
+  @@map("Photos")
+}
