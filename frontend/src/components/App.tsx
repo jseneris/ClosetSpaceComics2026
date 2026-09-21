@@ -1,179 +1,221 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useAuth0 } from '@auth0/auth0-react';
+import React, { useEffect, useState } from 'react';
 import closetSpaceComicsApi from '../api/ClosetSpaceComicsApi';
+import { Issue } from '../types';
+import { LatestPurchaseBooks } from './LatestPurchaseBooks';
 import { HeaderSection } from './HeaderSection';
-import { CatalogSection } from './CatalogSection';
-import { CollectionSection } from './CollectionSection';
-import { PurchasesSection } from './PurchasesSection';
-import { AboutUsSection } from './AboutUsSection';
 import { FooterSection } from './FooterSection';
-import { Filter, Issue, Location, PurchasesState, ListItem } from '../types';
 
 export const App: React.FC = () => {
-  const { isAuthenticated, loginWithRedirect, getAccessTokenSilently } = useAuth0();
-
-  const [filters, setFilters] = useState<Filter[]>([]);
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [purchases, setPurchases] = useState<PurchasesState>({ totalPages: 0, purchases: [] });
-
-  const getAccessToken = useCallback(async (): Promise<string> => {
-    if (!isAuthenticated) {
-      await loginWithRedirect();
-      return '';
-    }
-    const token = await getAccessTokenSilently();
-    return token ?? '';
-  }, [isAuthenticated, loginWithRedirect, getAccessTokenSilently]);
-
-  const authHeaders = useCallback(async () => {
-    const token = await getAccessToken();
-    return { Authorization: `Bearer ${token}` };
-  }, [getAccessToken]);
-
-  const handleSearchByDate = useCallback(async (searchDate: string) => {
-    const response = await closetSpaceComicsApi.get('/catalog/issues', { params: { date: searchDate } });
-
-    const issueList: Issue[] = (response.data.Issues ?? []).map((issue: any) => ({
-      id: issue.Id,
-      imageUrl: issue.ImageUrl,
-      title: issue.Title,
-      issueNum: issue.IssueNum,
-      publisher: issue.Publisher,
-      description: issue.Description,
-      coverPrice: issue.CoverPrice,
-    }));
-
-    const filterList: Filter[] = (response.data.Filters ?? []).map((filter: any) => ({
-      publisher: filter.Name,
-      imageUrl: filter.ImageUrl,
-    }));
-
-    setFilters(filterList);
-    setIssues(issueList);
-  }, []);
-
-  const getCollections = useCallback(async () => {
-    if (!isAuthenticated) return;
-    const headers = await authHeaders();
-    const response = await closetSpaceComicsApi.get('/user/collection', { headers });
-
-    const locationList: Location[] = (response.data.Locations ?? []).map((location: any) => ({
-      id: location.Id,
-      name: location.Name,
-      imageUrl: location.ImageUrl,
-      boxes: (location.Boxes ?? []).map((box: any) => ({ id: box.Id, name: box.Name, imageUrl: box.ImageUrl })),
-    }));
-
-    setLocations(locationList);
-  }, [isAuthenticated, authHeaders]);
-
-  const getPurchases = useCallback(
-    async (page: number) => {
-      if (!isAuthenticated) return;
-      const headers = await authHeaders();
-      const response = await closetSpaceComicsApi.get('/user/purchases', { params: { page }, headers });
-
-      setPurchases({
-        totalPages: response.data.TotalPages,
-        purchases: (response.data.Purchases ?? []).map((purchase: any) => ({
-          id: purchase.Id,
-          description: purchase.Description,
-          purchaseDate: purchase.PurchaseDate,
-          price: purchase.Price,
-          imageUrl: purchase.ImageUrl,
-        })),
-      });
-    },
-    [isAuthenticated, authHeaders]
-  );
+  const [books, setBooks] = useState<Issue[]>([]);
+  const [title, setTitle] = useState('');
+  const [titleDraft, setTitleDraft] = useState('');
+  const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
+  const [isLoadingTitleSuggestions, setIsLoadingTitleSuggestions] = useState(false);
+  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
+  const [publisher, setPublisher] = useState('');
+  const [year, setYear] = useState('');
+  const [publishers, setPublishers] = useState<string[]>([]);
+  const [years, setYears] = useState<number[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalIssues, setTotalIssues] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    handleSearchByDate(new Date().toISOString().substring(0, 10));
-    getCollections();
-    getPurchases(1);
-  }, [handleSearchByDate, getCollections, getPurchases]);
-
-  const handleAddLocation = async (payload: { description: string }): Promise<Location | null> => {
-    const headers = await authHeaders();
-    const response = await closetSpaceComicsApi.post('/user/locations', { name: payload.description }, { headers });
-    if (!response.data) return null;
-
-    const newLocation: Location = {
-      id: response.data.Id,
-      name: response.data.Name,
-      boxes: [],
+    const loadFilters = async () => {
+      try {
+        const response = await closetSpaceComicsApi.get('/catalog/collection/filters');
+        setPublishers(response.data.Publishers ?? []);
+        setYears(response.data.Years ?? []);
+      } catch {
+        setError('Unable to load collection filters.');
+      }
     };
-    setLocations((prev) => [newLocation, ...prev]);
-    return newLocation;
+
+    loadFilters();
+  }, []);
+
+  useEffect(() => {
+    const query = titleDraft.trim();
+    if (query.length < 2) {
+      setTitleSuggestions([]);
+      setIsLoadingTitleSuggestions(false);
+      setShowTitleSuggestions(false);
+      return;
+    }
+
+    setShowTitleSuggestions(true);
+    setIsLoadingTitleSuggestions(true);
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await closetSpaceComicsApi.get('/catalog/collection/title-suggestions', {
+          params: { q: query },
+        });
+        setTitleSuggestions((response.data.Titles ?? []).map((suggestion: any) => suggestion.Name));
+      } catch {
+        setTitleSuggestions([]);
+      } finally {
+        setIsLoadingTitleSuggestions(false);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [titleDraft]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(page === 1);
+    setIsLoadingMore(page > 1);
+    setError(null);
+
+    const loadBooks = async () => {
+      try {
+        const response = await closetSpaceComicsApi.get('/catalog/collection', {
+          params: { page, title, publisher, year: year || undefined },
+        });
+        const nextBooks = (
+          (response.data.Books ?? []).map((book: any) => ({
+            id: book.Id,
+            imageUrl: book.ImageUrl,
+            issueSeoFriendlyName: book.IssueSeoFriendlyName,
+            title: book.Title,
+            issueNum: book.IssueNum,
+            publisher: book.Publisher,
+            description: book.Description,
+            coverPrice: book.CoverPrice,
+          }))
+        );
+        if (cancelled) return;
+        setTotalIssues(response.data.TotalIssues ?? 0);
+        setBooks((current) => (page === 1 ? nextBooks : [...current, ...nextBooks]));
+        setHasMore(Boolean(response.data.HasMore));
+      } catch {
+        if (cancelled) return;
+        setError('Unable to load the latest purchase.');
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+          setIsLoadingMore(false);
+        }
+      }
+    };
+
+    loadBooks();
+    return () => {
+      cancelled = true;
+    };
+  }, [page, title, publisher, year]);
+
+  const updateFilter = (setter: (value: string) => void, value: string) => {
+    setBooks([]);
+    setTotalIssues(0);
+    setIsLoading(true);
+    setPage(1);
+    setter(value);
   };
 
-  const handleEditLocation = async (payload: { description: string; itemId?: number }) => {
-    const headers = await authHeaders();
-    await closetSpaceComicsApi.post(`/user/locations/${payload.itemId}`, { name: payload.description }, { headers });
-    setLocations((prev) =>
-      prev.map((location) =>
-        location.id === payload.itemId ? { ...location, name: payload.description } : location
-      )
-    );
+  const applyTitle = (value: string) => {
+    setTitleDraft(value);
+    updateFilter(setTitle, value.trim());
   };
 
-  const handleAddBox = async (payload: { description: string; locationId: number }): Promise<ListItem | null> => {
-    const headers = await authHeaders();
-    const response = await closetSpaceComicsApi.post(
-      `/user/locations/${payload.locationId}/boxes`,
-      { name: payload.description },
-      { headers }
-    );
-    if (!response.data) return null;
-
-    const newBox: ListItem = { id: response.data.Id, name: response.data.Name };
-    setLocations((prev) =>
-      prev.map((location) =>
-        location.id === payload.locationId ? { ...location, boxes: [newBox, ...location.boxes] } : location
-      )
-    );
-    return newBox;
-  };
-
-  const handleEditBox = async (payload: { description: string; itemId?: number; locationId: number }) => {
-    const headers = await authHeaders();
-    await closetSpaceComicsApi.post(
-      `/user/locations/${payload.locationId}/boxes/${payload.itemId}`,
-      { name: payload.description },
-      { headers }
-    );
-    setLocations((prev) =>
-      prev.map((location) => {
-        if (location.id !== payload.locationId) return location;
-        return {
-          ...location,
-          boxes: location.boxes.map((box) =>
-            box.id === payload.itemId ? { ...box, name: payload.description } : box
-          ),
-        };
-      })
-    );
-  };
+  useEffect(() => {
+    const sentinel = document.getElementById('collection-load-more');
+    if (!sentinel || !hasMore || isLoadingMore) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setPage((current) => current + 1);
+    }, { rootMargin: '0px 0px 300px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore]);
 
   return (
     <div className="App">
       <HeaderSection />
-      <a id="section-catalog-anchor"></a>
-      <CatalogSection Filters={filters} Issues={issues} HandleDateChange={handleSearchByDate} />
-      <a id="section-collection-anchor"></a>
-      <CollectionSection
-        Locations={locations}
-        HandleAddLocation={handleAddLocation}
-        HandleEditLocation={handleEditLocation}
-        HandleAddBox={handleAddBox}
-        HandleEditBox={handleEditBox}
-        GetAccessToken={getAccessToken}
-      />
-      <a id="section-purchases-anchor"></a>
-      <PurchasesSection Purchases={purchases} />
-      <a id="section-about-us-anchor"></a>
-      <AboutUsSection />
+      <div className="collection-filters">
+        <label className="title-filter">
+          Title
+          <input
+            value={titleDraft}
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                applyTitle(titleDraft);
+                setTitleSuggestions([]);
+                setShowTitleSuggestions(false);
+              }
+            }}
+            onBlur={() =>
+              window.setTimeout(() => {
+                applyTitle(titleDraft);
+                setTitleSuggestions([]);
+                setShowTitleSuggestions(false);
+              }, 150)
+            }
+          />
+          {showTitleSuggestions ? (
+            <ul className="title-suggestions">
+              {isLoadingTitleSuggestions ? (
+                <li className="title-suggestions-loading">
+                  <span className="spinner" aria-label="Loading suggestions" />
+                </li>
+              ) : titleSuggestions.length > 0 ? (
+                titleSuggestions.map((suggestion) => (
+                  <li key={suggestion}>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        applyTitle(suggestion);
+                        setTitleSuggestions([]);
+                        setShowTitleSuggestions(false);
+                      }}
+                    >
+                      {suggestion}
+                    </button>
+                  </li>
+                ))
+              ) : (
+                <li className="title-suggestions-empty">No matching titles</li>
+              )}
+            </ul>
+          ) : null}
+        </label>
+        <label>
+          Publisher
+          <select value={publisher} onChange={(event) => updateFilter(setPublisher, event.target.value)}>
+            <option value="">All publishers</option>
+            {publishers.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </label>
+        <label>
+          Publication year
+          <select value={year} onChange={(event) => updateFilter(setYear, event.target.value)}>
+            <option value="">All years</option>
+            {years.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </label>
+        <p className="collection-count" aria-live="polite">
+          {isLoading && page === 1 ? 'Loading issues...' : `${totalIssues.toLocaleString()} issues found`}
+        </p>
+      </div>
+      {isLoading && page === 1 ? (
+        <div className="initial-collection-loader" role="status" aria-live="polite">
+          <span className="loading-spinner" aria-hidden="true" />
+          <span>Loading collection...</span>
+        </div>
+      ) : null}
+      {error ? <p>{error}</p> : null}
+      {(!isLoading || page > 1) && !error ? (
+        <>
+          <LatestPurchaseBooks Books={books} IsLoading={isLoadingMore} HasMore={hasMore} />
+        </>
+      ) : null}
+      <div id="collection-load-more" aria-hidden="true" />
       <FooterSection />
     </div>
   );

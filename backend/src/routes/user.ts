@@ -106,6 +106,36 @@ router.get('/purchases', async (req: Request, res: Response) => {
   });
 });
 
+// GET /api/user/latest-purchase-books
+router.get('/latest-purchase-books', async (_req: Request, res: Response) => {
+  const purchase = await prisma.purchase.findFirst({
+    where: { userId: 1 },
+    orderBy: [{ purchaseDate: 'desc' }, { id: 'desc' }],
+    include: {
+      items: {
+        where: { issueId: { not: null } },
+        orderBy: { id: 'desc' },
+        take: 5,
+        include: {
+          issue: { include: { title: { include: { publisher: true } } } },
+        },
+      },
+    },
+  });
+
+  res.send({
+    Books: (purchase?.items ?? []).map((item) => ({
+      Id: item.issue!.id,
+      ImageUrl: item.issue!.imageUrl,
+      IssueNum: String(item.issue!.issueNumberOrdinal),
+      Title: item.issue!.title.name,
+      Publisher: item.issue!.title.publisher.name,
+      Description: item.issue!.description,
+      CoverPrice: item.issue!.coverPrice,
+    })),
+  });
+});
+
 // POST /api/user/purchases — ported from UserController.CreateNewPurchase
 router.post('/purchases', async (req: Request, res: Response) => {
   const schema = z.object({

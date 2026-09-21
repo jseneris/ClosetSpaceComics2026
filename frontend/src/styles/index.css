@@ -104,12 +104,23 @@ section {
 /*Header*/
 /*---------------------------------------*/
 
-#hero-banner {
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
   background-image: url(background_search_desktop.jpg);
   background-size: cover;
   background-position: center;
-  height: 100vh;
   background-attachment: fixed;
+  opacity: 0.3;
+  z-index: -1;
+}
+
+.header-logo {
+  display: block;
+  margin: 20px auto;
+  height: 125px;
+  width: auto;
 }
 
 /*---------------------------------------*/
@@ -181,6 +192,218 @@ nav {
 
 .issue-list .issue img {
   height: 300px;
+}
+
+.latest-purchase-books {
+  padding: 20px;
+}
+
+.latest-purchase-books .issue-list {
+  display: grid;
+  gap: 20px 16px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.latest-purchase-books .issue-list::before,
+.latest-purchase-books .issue-list::after {
+  content: none;
+  display: none;
+}
+
+.latest-purchase-books .issue {
+  display: flex;
+  flex-direction: column;
+  float: none;
+  margin: 0;
+  max-height: none;
+  overflow: visible;
+  width: auto;
+}
+
+.latest-purchase-books .book-image {
+  flex: 0 0 300px;
+}
+
+.collection-filters {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin: 20px;
+}
+
+.collection-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title-filter {
+  position: relative;
+}
+
+.title-suggestions {
+  background: #fff;
+  border: 1px solid #bbb;
+  left: 0;
+  list-style: none;
+  margin: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+}
+
+.title-suggestions button {
+  background: #fff;
+  border: 0;
+  cursor: pointer;
+  display: block;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.title-suggestions button:hover,
+.title-suggestions button:focus {
+  background: #f0f0f0;
+}
+
+.title-suggestions-loading,
+.title-suggestions-empty {
+  align-items: center;
+  color: #777;
+  display: flex;
+  justify-content: center;
+  padding: 10px;
+}
+
+.spinner {
+  animation: spinner-rotate 0.8s linear infinite;
+  border: 2px solid #ddd;
+  border-radius: 50%;
+  border-top-color: #666;
+  display: inline-block;
+  height: 16px;
+  width: 16px;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.collection-count {
+  margin: 0 0 2px auto;
+  white-space: nowrap;
+}
+
+.collection-filters input,
+.collection-filters select {
+  padding: 6px;
+}
+
+#collection-load-more {
+  height: 1px;
+}
+
+.initial-collection-loader {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 48px 0;
+}
+
+.infinite-scroll-loader {
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d8d8d8;
+  border-radius: 4px;
+  bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  left: 50%;
+  margin: 0;
+  padding: 10px 16px;
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 100;
+}
+
+.loading-spinner {
+  animation: collection-spinner 0.8s linear infinite;
+  border: 3px solid #d8d8d8;
+  border-radius: 50%;
+  border-top-color: #007bff;
+  display: inline-block;
+  height: 22px;
+  width: 22px;
+}
+
+@keyframes collection-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.purchase-selector {
+  display: block;
+  margin: 20px;
+}
+
+.purchase-selector select {
+  margin-left: 8px;
+  padding: 6px;
+}
+
+.latest-purchase-books .issue img {
+  display: block;
+  height: 300px;
+  max-width: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.book-label {
+  font-size: 0.75rem;
+  margin-top: 6px;
+  min-height: 2.4em;
+  overflow-wrap: anywhere;
+}
+
+.book-label span {
+  display: block;
+}
+
+@media only screen and (max-width: 480px) {
+  .latest-purchase-books .issue-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.collection-pagination {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.collection-pagination button {
+  cursor: pointer;
+  padding: 8px 16px;
+}
+
+.collection-pagination button:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 /*---------------------------------------*/

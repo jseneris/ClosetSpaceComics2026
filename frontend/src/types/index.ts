@@ -6,6 +6,7 @@ export interface Filter {
 export interface Issue {
   id: number;
   imageUrl: string | null;
+  issueSeoFriendlyName?: string | null;
   title: string;
   issueNum: string;
   publisher: string;

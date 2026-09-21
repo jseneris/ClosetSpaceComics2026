@@ -53,7 +53,6 @@ model Issue {
   imageUrl           String?
   titleId            Int
   title              Title     @relation(fields: [titleId], references: [id])
-  createdDate        DateTime  @default(now())
   purchaseItems      PurchaseItem[]
 
   @@map("Issues")
