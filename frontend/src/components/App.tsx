@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import closetSpaceComicsApi from '../api/ClosetSpaceComicsApi';
 import { Issue } from '../types';
 import { LatestPurchaseBooks } from './LatestPurchaseBooks';
@@ -22,22 +22,30 @@ export const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const skipSuggestionsEffect = useRef(false);
 
   useEffect(() => {
     const loadFilters = async () => {
       try {
-        const response = await closetSpaceComicsApi.get('/catalog/collection/filters');
+        const response = await closetSpaceComicsApi.get('/catalog/collection/filters', {
+          params: { title: title || undefined },
+        });
         setPublishers(response.data.Publishers ?? []);
-        setYears(response.data.Years ?? []);
+        setYears((response.data.Years ?? []).slice().sort((left: number, right: number) => right - left));
       } catch {
         setError('Unable to load collection filters.');
       }
     };
 
     loadFilters();
-  }, []);
+  }, [title]);
 
   useEffect(() => {
+    if (skipSuggestionsEffect.current) {
+      skipSuggestionsEffect.current = false;
+      return;
+    }
+
     const query = titleDraft.trim();
     if (query.length < 2) {
       setTitleSuggestions([]);
@@ -67,9 +75,22 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
+    const loadStartedAt = Date.now();
+    const minLoadingMs = 400;
     setIsLoading(page === 1);
     setIsLoadingMore(page > 1);
     setError(null);
+
+    const finishLoading = () => {
+      if (cancelled) return;
+      const elapsed = Date.now() - loadStartedAt;
+      window.setTimeout(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+          setIsLoadingMore(false);
+        }
+      }, Math.max(0, minLoadingMs - elapsed));
+    };
 
     const loadBooks = async () => {
       try {
@@ -96,10 +117,7 @@ export const App: React.FC = () => {
         if (cancelled) return;
         setError('Unable to load the latest purchase.');
       } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-          setIsLoadingMore(false);
-        }
+        finishLoading();
       }
     };
 
@@ -118,19 +136,41 @@ export const App: React.FC = () => {
   };
 
   const applyTitle = (value: string) => {
+    skipSuggestionsEffect.current = true;
     setTitleDraft(value);
-    updateFilter(setTitle, value.trim());
+    const trimmed = value.trim();
+    if (trimmed === title) {
+      // Value unchanged (e.g. Enter's blur re-firing applyTitle) — skip the redundant requery.
+      return;
+    }
+    updateFilter(setTitle, trimmed);
+  };
+
+  const clearFilters = () => {
+    setTitleDraft('');
+    setTitleSuggestions([]);
+    setShowTitleSuggestions(false);
+    setBooks([]);
+    setTotalIssues(0);
+    setIsLoading(true);
+    setPage(1);
+    setTitle('');
+    setPublisher('');
+    setYear('');
   };
 
   useEffect(() => {
     const sentinel = document.getElementById('collection-load-more');
-    if (!sentinel || !hasMore || isLoadingMore) return;
+    // Don't observe while the initial/filter-driven page 1 load is still in flight —
+    // the sentinel can sit inside the viewport before any books render, which would
+    // bump the page prematurely and clear isLoading before real data has arrived.
+    if (!sentinel || !hasMore || isLoadingMore || isLoading) return;
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) setPage((current) => current + 1);
     }, { rootMargin: '0px 0px 300px 0px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, isLoadingMore]);
+  }, [hasMore, isLoadingMore, isLoading]);
 
   return (
     <div className="App">
@@ -147,6 +187,7 @@ export const App: React.FC = () => {
                 applyTitle(titleDraft);
                 setTitleSuggestions([]);
                 setShowTitleSuggestions(false);
+                event.currentTarget.blur();
               }
             }}
             onBlur={() =>
@@ -199,6 +240,9 @@ export const App: React.FC = () => {
             {years.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
         </label>
+        <button type="button" className="clear-filters" onClick={clearFilters}>
+          Clear filters
+        </button>
         <p className="collection-count" aria-live="polite">
           {isLoading && page === 1 ? 'Loading issues...' : `${totalIssues.toLocaleString()} issues found`}
         </p>
@@ -210,10 +254,13 @@ export const App: React.FC = () => {
         </div>
       ) : null}
       {error ? <p>{error}</p> : null}
-      {(!isLoading || page > 1) && !error ? (
-        <>
-          <LatestPurchaseBooks Books={books} IsLoading={isLoadingMore} HasMore={hasMore} />
-        </>
+      {!error ? (
+        <LatestPurchaseBooks
+          Books={books}
+          IsLoading={isLoadingMore}
+          IsInitialLoading={isLoading && page === 1}
+          HasMore={hasMore}
+        />
       ) : null}
       <div id="collection-load-more" aria-hidden="true" />
       <FooterSection />

@@ -28,7 +28,7 @@ model Publisher {
 
 model Title {
   id              Int       @id @default(autoincrement())
-  name            String
+  name            String    @db.NVarChar(450)
   seoFriendlyName String?
   yearStart       Int
   yearEnd         Int?
@@ -40,6 +40,7 @@ model Title {
   issues          Issue[]
   purchaseItems   PurchaseItem[]
 
+  @@index([name])
   @@map("Titles")
 }
 
@@ -55,6 +56,7 @@ model Issue {
   title              Title     @relation(fields: [titleId], references: [id])
   purchaseItems      PurchaseItem[]
 
+  @@index([titleId, issueNumberOrdinal])
   @@map("Issues")
 }
 
@@ -80,6 +82,8 @@ model Location {
   user   User   @relation(fields: [userId], references: [id])
   boxes  Box[]
 
+  @@index([userId])
+  @@index([name])
   @@map("Locations")
 }
 
@@ -91,6 +95,7 @@ model Box {
   location   Location       @relation(fields: [locationId], references: [id])
   items      PurchaseItem[]
 
+  @@index([locationId])
   @@map("Boxes")
 }
 
@@ -103,6 +108,7 @@ model Purchase {
   user          User           @relation(fields: [userId], references: [id])
   items         PurchaseItem[]
 
+  @@index([userId])
   @@map("Purchases")
 }
 
@@ -132,6 +138,10 @@ model PurchaseItem {
   certificateNumber  String?
   photos             Photo[]
 
+  @@index([purchaseId])
+  @@index([boxId])
+  @@index([titleId])
+  @@index([issueId])
   @@map("PurchaseItems")
 }
 

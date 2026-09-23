@@ -65,7 +65,12 @@ router.get(
 
     const box = await prisma.box.findFirst({
       where: { id: boxId, locationId, location: { userId: req.currentUserId } },
-      include: { items: { include: { issue: true } } },
+      include: {
+        items: {
+          include: { issue: true },
+          orderBy: [{ issue: { title: { name: 'asc' } } }, { issue: { issueNumberOrdinal: 'asc' } }],
+        },
+      },
     });
     if (!box) {
       throw new BadRequestError('box not found');

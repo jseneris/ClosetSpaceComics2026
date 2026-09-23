@@ -226,10 +226,14 @@ nav {
 
 .collection-filters {
   align-items: end;
+  background-color: rgba(255, 255, 255, 0.96);
   display: flex;
   flex-wrap: wrap;
   gap: 12px 20px;
-  margin: 20px;
+  padding: 20px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .collection-filters label {
@@ -305,6 +309,19 @@ nav {
 .collection-filters input,
 .collection-filters select {
   padding: 6px;
+}
+
+.clear-filters {
+  background: #fff;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 7px 12px;
+}
+
+.clear-filters:hover,
+.clear-filters:focus {
+  background: #f0f0f0;
 }
 
 #collection-load-more {

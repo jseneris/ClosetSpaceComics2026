@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../prismaClient';
 import { BadRequestError } from '../errors/bad-request-error';
 import { blobStorageService } from '../services/blobStorageService';
@@ -63,48 +64,56 @@ router.get('/purchases', async (_req: Request, res: Response) => {
 });
 
 // GET /api/catalog/collection/filters — public filters for user 1's collection.
-router.get('/collection/filters', async (_req: Request, res: Response) => {
-  const purchasedIssue = {
-    some: { purchase: { userId: 1 } },
-    none: {
-      purchase: { userId: 1 },
-      box: { location: { name: 'Sold' } },
-    },
-  };
-  const issues = await prisma.issue.findMany({
-    where: { purchaseItems: purchasedIssue },
-    select: {
-      releaseDate: true,
-      title: { select: { publisher: { select: { name: true } } } },
-    },
-  });
-  const publishers = Array.from(new Set(issues.map((issue) => issue.title.publisher.name))).sort();
-  const years = Array.from(
-    new Set(issues.flatMap((issue) => (issue.releaseDate ? [issue.releaseDate.getUTCFullYear()] : [])))
-  ).sort((left, right) => right - left);
+// Aggregation runs in SQL against the ActivePurchaseItems view instead of pulling rows into Node.
+router.get('/collection/filters', async (req: Request, res: Response) => {
+  const title = String(req.query.title ?? '').trim();
+  const titleFilter = title ? Prisma.sql`AND t.name LIKE ${`%${title}%`}` : Prisma.empty;
+
+  const [publisherRows, yearRows] = await Promise.all([
+    prisma.$queryRaw<Array<{ name: string; purchaseItemCount: number }>>(Prisma.sql`
+      SELECT p.name AS name, COUNT(api.id) AS purchaseItemCount
+      FROM Publishers p
+      JOIN Titles t ON t.publisherId = p.id
+      JOIN ActivePurchaseItems api ON api.titleId = t.id AND api.userId = 1
+      WHERE 1 = 1 ${titleFilter}
+      GROUP BY p.name
+      ORDER BY COUNT(api.id) DESC, p.name ASC
+    `),
+    prisma.$queryRaw<Array<{ year: number }>>(Prisma.sql`
+      SELECT DISTINCT YEAR(i.releaseDate) AS year
+      FROM Issues i
+      JOIN Titles t ON t.id = i.titleId
+      JOIN ActivePurchaseItems api ON api.issueId = i.id AND api.userId = 1
+      WHERE i.releaseDate IS NOT NULL ${titleFilter}
+      ORDER BY year DESC
+    `),
+  ]);
 
   return res.send({
-    Publishers: publishers,
-    Years: years,
+    Publishers: publisherRows.map((row) => row.name),
+    Years: yearRows.map((row) => row.year),
   });
 });
 
 // GET /api/catalog/collection/title-suggestions?q=bat
+// Ranking (by purchase item quantity) runs in SQL against the ActivePurchaseItems view.
 router.get('/collection/title-suggestions', async (req: Request, res: Response) => {
   const query = String(req.query.q ?? '').trim();
   if (query.length < 2) {
     return res.send({ Titles: [] });
   }
 
-  const titles = await prisma.title.findMany({
-    where: { name: { contains: query } },
-    orderBy: { name: 'asc' },
-    take: 10,
-    select: { name: true, seoFriendlyName: true },
-  });
+  const rows = await prisma.$queryRaw<Array<{ name: string; seoFriendlyName: string | null }>>(Prisma.sql`
+    SELECT TOP 10 t.name AS name, t.seoFriendlyName AS seoFriendlyName
+    FROM Titles t
+    JOIN ActivePurchaseItems api ON api.titleId = t.id AND api.userId = 1
+    WHERE t.name LIKE ${`%${query}%`}
+    GROUP BY t.name, t.seoFriendlyName
+    ORDER BY COUNT(api.id) DESC, t.name ASC
+  `);
 
   return res.send({
-    Titles: titles.map((title) => ({ Name: title.name, SeoFriendlyName: title.seoFriendlyName })),
+    Titles: rows.map((row) => ({ Name: row.name, SeoFriendlyName: row.seoFriendlyName })),
   });
 });
 
@@ -120,57 +129,71 @@ router.get('/collection', async (req: Request, res: Response) => {
   const releaseDate = year
     ? { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) }
     : undefined;
-  const where = {
-    title: {
-      ...(title ? { name: { contains: title } } : {}),
-      ...(publisher ? { publisher: { name: publisher } } : {}),
-    },
-    ...(releaseDate ? { releaseDate } : {}),
-    purchaseItems: {
-      some: { purchase: { userId: 1 } },
-      none: {
-        purchase: { userId: 1 },
-        box: { location: { name: 'Sold' } },
-      },
-    },
-  };
 
-  const [items, total] = await Promise.all([
-    prisma.issue.findMany({
-      where,
-      orderBy: [{ title: { name: 'asc' } }, { issueNumberOrdinal: 'asc' }, { id: 'asc' }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      select: {
-        id: true,
-        seoFriendlyName: true,
-        imageUrl: true,
-        issueNumberOrdinal: true,
-        description: true,
-        coverPrice: true,
-        title: {
-          select: {
-            name: true,
-            seoFriendlyName: true,
-            publisher: { select: { name: true, seoFriendlyName: true } },
-          },
+  // Resolve matching issue ids via the indexed ActivePurchaseItems view instead of the
+  // slow correlated some/none relation filter, which was scanning the whole collection
+  // whenever title/publisher/year weren't narrowing the search (e.g. "Clear filters").
+  const titleFilter = title ? Prisma.sql`AND t.name LIKE ${`%${title}%`}` : Prisma.empty;
+  const publisherFilter = publisher ? Prisma.sql`AND p.name = ${publisher}` : Prisma.empty;
+  const releaseDateFilter = releaseDate
+    ? Prisma.sql`AND i.releaseDate >= ${releaseDate.gte} AND i.releaseDate < ${releaseDate.lt}`
+    : Prisma.empty;
+
+  const [matchingPage, [{ total }]] = await Promise.all([
+    prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+      SELECT DISTINCT i.id AS id, t.name AS titleName, i.issueNumberOrdinal AS issueNumberOrdinal
+      FROM Issues i
+      JOIN Titles t ON t.id = i.titleId
+      JOIN Publishers p ON p.id = t.publisherId
+      JOIN ActivePurchaseItems api ON api.issueId = i.id AND api.userId = 1
+      WHERE 1 = 1 ${titleFilter} ${publisherFilter} ${releaseDateFilter}
+      ORDER BY titleName ASC, issueNumberOrdinal ASC, id ASC
+      OFFSET ${(page - 1) * pageSize} ROWS FETCH NEXT ${pageSize} ROWS ONLY
+    `),
+    prisma.$queryRaw<Array<{ total: number }>>(Prisma.sql`
+      SELECT COUNT(*) AS total FROM (
+        SELECT DISTINCT i.id
+        FROM Issues i
+        JOIN Titles t ON t.id = i.titleId
+        JOIN Publishers p ON p.id = t.publisherId
+        JOIN ActivePurchaseItems api ON api.issueId = i.id AND api.userId = 1
+        WHERE 1 = 1 ${titleFilter} ${publisherFilter} ${releaseDateFilter}
+      ) AS matches
+    `),
+  ]);
+  const pageIds = matchingPage.map((row) => row.id);
+
+  const items = await prisma.issue.findMany({
+    where: { id: { in: pageIds } },
+    orderBy: [{ title: { name: 'asc' } }, { issueNumberOrdinal: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      seoFriendlyName: true,
+      imageUrl: true,
+      issueNumberOrdinal: true,
+      description: true,
+      coverPrice: true,
+      title: {
+        select: {
+          name: true,
+          seoFriendlyName: true,
+          publisher: { select: { name: true, seoFriendlyName: true } },
         },
-        purchaseItems: {
-          where: { purchase: { userId: 1 } },
-          orderBy: { id: 'desc' },
-          take: 1,
-          select: {
-            photos: {
-              orderBy: { id: 'asc' },
-              take: 1,
-              select: { name: true },
-            },
+      },
+      purchaseItems: {
+        where: { purchase: { userId: 1 } },
+        orderBy: { id: 'desc' },
+        take: 1,
+        select: {
+          photos: {
+            orderBy: { id: 'asc' },
+            take: 1,
+            select: { name: true },
           },
         },
       },
-    }),
-    prisma.issue.count({ where }),
-  ]);
+    },
+  });
 
   return res.send({
     Page: page,

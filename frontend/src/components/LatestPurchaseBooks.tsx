@@ -4,14 +4,20 @@ import { Issue } from '../types';
 interface LatestPurchaseBooksProps {
   Books: Issue[];
   IsLoading: boolean;
+  IsInitialLoading: boolean;
   HasMore: boolean;
 }
 
 export const LatestPurchaseBooks: React.FC<LatestPurchaseBooksProps> = ({
   Books,
   IsLoading,
+  IsInitialLoading,
   HasMore,
 }) => {
+  if (IsInitialLoading) {
+    return null;
+  }
+
   if (Books.length === 0) {
     return <p>No books were found.</p>;
   }
