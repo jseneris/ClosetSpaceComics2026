@@ -56,7 +56,7 @@ model Issue {
   title              Title     @relation(fields: [titleId], references: [id])
   purchaseItems      PurchaseItem[]
 
-  @@index([titleId, issueNumberOrdinal])
+  @@index([titleId, issueNumberOrdinal, releaseDate])
   @@map("Issues")
 }
 
@@ -66,7 +66,7 @@ model Issue {
 
 model User {
   id        Int        @id @default(autoincrement())
-  auth0Id   String     @unique
+  auth0Id   String?    @unique
   userName  String?
   locations Location[]
   purchases Purchase[]
@@ -88,14 +88,15 @@ model Location {
 }
 
 model Box {
-  id         Int            @id @default(autoincrement())
-  name       String
-  order      Int            @default(0)
-  locationId Int
-  location   Location       @relation(fields: [locationId], references: [id])
-  items      PurchaseItem[]
+  id                 Int            @id @default(autoincrement())
+  name               String
+  order              Int            @default(0)
+  locationId         Int
+  location           Location       @relation(fields: [locationId], references: [id])
+  items              PurchaseItem[]
+  isVisibleInCatalog Boolean        @default(false)
 
-  @@index([locationId])
+  @@index([locationId, isVisibleInCatalog])
   @@map("Boxes")
 }
 
@@ -141,7 +142,7 @@ model PurchaseItem {
   @@index([purchaseId])
   @@index([boxId])
   @@index([titleId])
-  @@index([issueId])
+  @@index([issueId, purchaseId, boxId])
   @@map("PurchaseItems")
 }
 

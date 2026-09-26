@@ -116,9 +116,14 @@ body::before {
   z-index: -1;
 }
 
+header {
+  background-color: #fff;
+  padding-top: 20px;
+}
+
 .header-logo {
   display: block;
-  margin: 20px auto;
+  margin: 0 auto;
   height: 125px;
   width: auto;
 }
@@ -201,7 +206,7 @@ nav {
 .latest-purchase-books .issue-list {
   display: grid;
   gap: 20px 16px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
 }
 
 .latest-purchase-books .issue-list::before,
@@ -221,12 +226,20 @@ nav {
 }
 
 .latest-purchase-books .book-image {
+  align-items: center;
+  display: flex;
   flex: 0 0 300px;
+  justify-content: center;
+  position: relative;
+}
+
+.cover-loading-spinner {
+  position: absolute;
 }
 
 .collection-filters {
   align-items: end;
-  background-color: rgba(255, 255, 255, 0.96);
+  background-color: #fff;
   display: flex;
   flex-wrap: wrap;
   gap: 12px 20px;
@@ -389,19 +402,25 @@ nav {
 }
 
 .book-label {
-  font-size: 0.75rem;
-  margin-top: 6px;
+  font-size: 0.9rem;
+  line-height: 1.1;
+  margin-top: 0;
   min-height: 2.4em;
   overflow-wrap: anywhere;
+  transform: translateY(-2px);
 }
 
 .book-label span {
   display: block;
 }
 
+.book-label span:first-child {
+  font-weight: 600;
+}
+
 @media only screen and (max-width: 480px) {
   .latest-purchase-books .issue-list {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

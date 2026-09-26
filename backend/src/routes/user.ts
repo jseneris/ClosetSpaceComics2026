@@ -14,7 +14,11 @@ router.use(requireAuth, attachCurrentUser);
 router.get('/collection', async (req: Request, res: Response) => {
   const locations = await prisma.location.findMany({
     where: { userId: req.currentUserId },
-    include: { boxes: true },
+    include: {
+      boxes: {
+        include: { _count: { select: { items: true } } },
+      },
+    },
     orderBy: { order: 'asc' },
   });
 
@@ -22,7 +26,12 @@ router.get('/collection', async (req: Request, res: Response) => {
     Locations: locations.map((location) => ({
       Id: location.id,
       Name: location.name,
-      Boxes: location.boxes.map((box) => ({ Id: box.id, Name: box.name })),
+      Boxes: location.boxes.map((box) => ({
+        Id: box.id,
+        Name: box.name,
+        ItemCount: box._count.items,
+        IsVisibleInCatalog: box.isVisibleInCatalog,
+      })),
     })),
   });
 });
@@ -54,6 +63,27 @@ router.post('/locations/:locationId/boxes', async (req: Request, res: Response) 
 
   const box = await prisma.box.create({ data: { name, locationId, order: 0 } });
   res.send({ Id: box.id, Name: box.name });
+});
+
+// PATCH /api/user/boxes/:boxId/visibility — toggle whether a box's contents show on the public catalog.
+router.patch('/boxes/:boxId/visibility', async (req: Request, res: Response) => {
+  const schema = z.object({ isVisibleInCatalog: z.boolean() });
+  const { isVisibleInCatalog } = schema.parse(req.body);
+  const boxId = Number(req.params.boxId);
+
+  const box = await prisma.box.findFirst({
+    where: { id: boxId, location: { userId: req.currentUserId } },
+  });
+  if (!box) {
+    throw new BadRequestError('box not found');
+  }
+
+  const updated = await prisma.box.update({
+    where: { id: boxId },
+    data: { isVisibleInCatalog },
+  });
+
+  res.send({ Id: updated.id, Name: updated.name, IsVisibleInCatalog: updated.isVisibleInCatalog });
 });
 
 // GET /api/user/collection/location/:locationId/box/:boxId — ported from UserController.GetBox

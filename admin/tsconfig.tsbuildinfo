@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/vite-env.d.ts","./src/api/closetspacecomicsapi.ts","./src/auth/auth0providerwithconfig.tsx","./src/components/app.tsx","./src/types/index.ts"],"version":"5.9.3"}

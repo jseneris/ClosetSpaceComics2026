@@ -49,7 +49,10 @@ function required(name: string, fallback?: string): string {
 
 export const env = {
   port: Number(process.env.PORT ?? 4000),
-  corsOrigin: required('CORS_ORIGIN', 'http://localhost:5173'),
+  corsOrigin: required('CORS_ORIGIN', 'http://localhost:5173,http://localhost:5174')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   databaseUrl: required('DATABASE_URL'),
   azure: {
     storageConnectionString: required('AZURE_STORAGE_CONNECTION_STRING'),

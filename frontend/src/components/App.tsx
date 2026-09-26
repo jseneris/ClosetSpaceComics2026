@@ -28,7 +28,7 @@ export const App: React.FC = () => {
     const loadFilters = async () => {
       try {
         const response = await closetSpaceComicsApi.get('/catalog/collection/filters', {
-          params: { title: title || undefined },
+          params: { title: title || undefined, publisher: publisher || undefined },
         });
         setPublishers(response.data.Publishers ?? []);
         setYears((response.data.Years ?? []).slice().sort((left: number, right: number) => right - left));
@@ -38,7 +38,7 @@ export const App: React.FC = () => {
     };
 
     loadFilters();
-  }, [title]);
+  }, [title, publisher]);
 
   useEffect(() => {
     if (skipSuggestionsEffect.current) {
@@ -75,22 +75,9 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const loadStartedAt = Date.now();
-    const minLoadingMs = 400;
     setIsLoading(page === 1);
     setIsLoadingMore(page > 1);
     setError(null);
-
-    const finishLoading = () => {
-      if (cancelled) return;
-      const elapsed = Date.now() - loadStartedAt;
-      window.setTimeout(() => {
-        if (!cancelled) {
-          setIsLoading(false);
-          setIsLoadingMore(false);
-        }
-      }, Math.max(0, minLoadingMs - elapsed));
-    };
 
     const loadBooks = async () => {
       try {
@@ -117,7 +104,10 @@ export const App: React.FC = () => {
         if (cancelled) return;
         setError('Unable to load the latest purchase.');
       } finally {
-        finishLoading();
+        if (!cancelled) {
+          setIsLoading(false);
+          setIsLoadingMore(false);
+        }
       }
     };
 

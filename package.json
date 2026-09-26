@@ -5,14 +5,17 @@
   "description": "Comic book database MVP monorepo (TypeScript backend + React frontend, Azure SQL + Blob Storage)",
   "workspaces": [
     "backend",
-    "frontend"
+    "frontend",
+    "admin"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace backend",
     "dev:frontend": "npm run dev --workspace frontend",
+    "dev:admin": "npm run dev --workspace admin",
     "build:backend": "npm run build --workspace backend",
     "build:frontend": "npm run build --workspace frontend",
-    "build": "npm run build:backend && npm run build:frontend",
+    "build:admin": "npm run build --workspace admin",
+    "build": "npm run build:backend && npm run build:frontend && npm run build:admin",
     "prisma:generate": "npm run prisma:generate --workspace backend",
     "prisma:migrate": "npm run prisma:migrate --workspace backend"
   },
